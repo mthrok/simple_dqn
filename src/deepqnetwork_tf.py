@@ -92,12 +92,14 @@ class DeepQNetwork(object):
             'reward': [],
             'steps': [],
         }
-        self.training_summary_ops = {}
+        ops = {}
         for key in self.summary_values.keys():
+            name = 'training/{}'.format(key)
+            ops[name] = tf.histogram_summary(name, self.summary_placeholder)
             for attr in ['average', 'min', 'max']:
                 name = '{}/{}'.format(key, attr)
-                self.training_summary_ops[name] = tf.scalar_summary(
-                    name, self.summary_placeholder)
+                ops[name] = tf.scalar_summary(name, self.summary_placeholder)
+        self.training_summary_ops = ops
 
     def _build_net_summary_ops(self):
         model = self.ql.pre_trans_model
@@ -111,7 +113,7 @@ class DeepQNetwork(object):
 
     def _init_summary_writer(self):
         now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        path = 'summary/{}'.format(now)
+        path = 'snapshots/{}'.format(now)
         self.writer = tf.train.SummaryWriter(path, self.session.graph)
 
     def _init_saver(self):
@@ -165,15 +167,17 @@ class DeepQNetwork(object):
     def _summarize_training(self, step):
         for key, values in self.summary_values.items():
             if values:
+                name = 'training/{}'.format(key)
+                self._summarize(step, name, value=values)
                 name = '{}/average'.format(key)
-                self._summarize_scalar(step, name, value=np.mean(values))
+                self._summarize(step, name, value=np.mean(values))
                 name = '{}/min'.format(key)
-                self._summarize_scalar(step, name, value=np.min(values))
+                self._summarize(step, name, value=np.min(values))
                 name = '{}/max'.format(key)
-                self._summarize_scalar(step, name, value=np.max(values))
+                self._summarize(step, name, value=np.max(values))
                 self.summary_values[key] = []
 
-    def _summarize_scalar(self, step, name, value):
+    def _summarize(self, step, name, value):
         summary = self.session.run(
             self.training_summary_ops[name],
             feed_dict={self.summary_placeholder: value})
