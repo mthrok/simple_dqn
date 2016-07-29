@@ -3,7 +3,7 @@ logging.basicConfig(format='%(asctime)s %(message)s')
 
 from environment import ALEEnvironment, GymEnvironment
 from replay_memory import ReplayMemory
-from deepqnetwork_tf import DeepQNetwork
+from deepqnetwork_luchador import DeepQNetwork
 from agent import Agent
 from statistics_tf import Statistics
 import random
