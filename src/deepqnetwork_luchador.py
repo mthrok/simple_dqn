@@ -205,6 +205,7 @@ class DeepQNetwork(object):
         return preq
 
     def _optimize_model(self, prestates, actions, rewards, poststates, terminals):
+        rewards = rewards.astype(np.float32)
         error = self.session.run(
             name='optimization',
             outputs=[self.sse_error],
@@ -213,19 +214,20 @@ class DeepQNetwork(object):
                 self.ql.actions: actions,
                 self.ql.rewards: rewards,
                 self.ql.post_states: poststates,
-                self.ql.terminals: 1 - terminals,
+                self.ql.terminals: terminals,
             },
             updates=self.update_op)[0]
         return error
 
     def predict(self, states):
         # minibatch is full size, because Agent pass in such way
-        assert states.shape == ((self.batch_size, self.history_length,) + self.screen_dim)
 
-        # minibatches are in order of 'NCHW'
-        # If using CPU, this must be transposed to 'NHWC'
-        if self.backend == 'cpu':
+        if self.luchador_mode == 'tensorflow' and self.backend == 'cpu':
+            # If using CPU, this must be transposed to 'NHWC'
             states = states.transpose((0, 2, 3, 1))
+            assert states.shape == (self.batch_size,) + self.screen_dim + (self.history_length,)
+        else:
+            assert states.shape == (self.batch_size, self.history_length,) + self.screen_dim
 
         # calculate Q-values for the states
         qvalues = self._get_pre_q(states)
