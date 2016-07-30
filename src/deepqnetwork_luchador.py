@@ -1,6 +1,10 @@
 import logging
 import datetime
 
+import theano
+theano.config.optimizer = 'None'
+theano.config.exception_verbosity = 'high'
+
 import numpy as np
 
 import luchador
@@ -28,7 +32,7 @@ class DeepQNetwork(object):
         self.decay_rate = args.decay_rate
         self.target_steps = args.target_steps
 
-        self.luchador_mode = 'tensorflow'
+        self.luchador_mode = 'theano'
         self.train_iterations = 0
 
         self._build_network()
@@ -38,12 +42,13 @@ class DeepQNetwork(object):
         from luchador.nn import DeepQLearning, Input, SSE2, RMSProp, Session, SummaryWriter
         from luchador.nn.models import model_factory
 
-        if self.backend == 'gpu':
-            input_shape = (None, self.history_length) + self.screen_dim
-            data_format = 'NCHW'
-        else:
-            input_shape = (None, ) + self.screen_dim + (self.history_length, )
+        if self.luchador_mode == 'tensorflow' and self.backend == 'cpu':
+            input_shape = (self.batch_size, ) + self.screen_dim + (self.history_length, )
             data_format = 'NHWC'
+        else:
+            input_shape = (self.batch_size, self.history_length) + self.screen_dim
+            data_format = 'NCHW'
+
         luchador.nn.set_cnn_format(data_format)
 
         def model_maker():
@@ -132,8 +137,8 @@ class DeepQNetwork(object):
         assert prestates.shape[0] == actions.shape[0] == rewards.shape[0] == poststates.shape[0] == terminals.shape[0]
 
         # minibatches are in order of 'NCHW'
-        # If using CPU, this must be transposed to 'NHWC'
-        if self.backend == 'cpu':
+        # If using CPU in tensorflow, this must be transposed to 'NHWC'
+        if self.luchador_mode == 'tensorflow' and self.backend == 'cpu':
             prestates = prestates.transpose((0, 2, 3, 1))
             poststates = poststates.transpose((0, 2, 3, 1))
 
@@ -158,7 +163,6 @@ class DeepQNetwork(object):
         self.session.run(name='sync', updates=self.ql.sync_op)
 
     def _summarize_net(self, step, states):
-        print 'Summarizing network', step
         params = self.ql.pre_trans_model.get_parameter_variables()
         outputs = self.ql.pre_trans_model.get_output_tensors()
         params_vals = self.session.run(
