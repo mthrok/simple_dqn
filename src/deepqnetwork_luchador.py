@@ -81,7 +81,7 @@ class DeepQNetwork(object):
         writer.register('training', 'histogram',
                         ['training/{}'.format(metric) for metric in metrics])
         writer.register('training_steps', 'scalar',
-                        ['step/{}'.format(stat) for stat in stats])
+                        ['steps/{}'.format(stat) for stat in stats])
         writer.register('training_error', 'scalar',
                         ['error/{}'.format(stat) for stat in stats])
         writer.register('training_reward', 'scalar',
