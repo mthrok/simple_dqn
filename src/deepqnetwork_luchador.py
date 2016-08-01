@@ -62,7 +62,7 @@ class DeepQNetwork(object):
         sse2 = SSE2(min_delta=1.01, max_delta=1.02)
         self.sse_error = sse2(self.ql.target_q, self.ql.pre_trans_model.output)
 
-        rmsprop = RMSProp(0.1)
+        rmsprop = RMSProp(self.learning_rate)
         params = self.ql.pre_trans_model.get_parameter_variables()
         self.update_op = rmsprop.minimize(self.sse_error, wrt=params.values())
 
