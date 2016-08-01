@@ -52,11 +52,13 @@ class DeepQNetwork(object):
         luchador.nn.set_cnn_format(data_format)
 
         def model_maker():
-            dqn = model_factory('vanilla_dqn', n_actions=self.num_actions)
+            dqn = (
+                model_factory('image_normalizer', denom=255.0) +
+                model_factory('vanilla_dqn', n_actions=self.num_actions)
+            )
             dqn(Input(shape=input_shape))
             return dqn
 
-        # with tf.device(self._get_device_name()):
         self.ql = DeepQLearning(
             self.discount_rate, self.min_reward, self.max_reward)
         self.ql.build(model_maker)
