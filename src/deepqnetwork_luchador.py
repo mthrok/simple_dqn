@@ -1,10 +1,6 @@
 import logging
 import datetime
 
-import theano
-theano.config.optimizer = 'None'
-theano.config.exception_verbosity = 'high'
-
 import numpy as np
 
 import luchador
@@ -32,7 +28,7 @@ class DeepQNetwork(object):
         self.decay_rate = args.decay_rate
         self.target_steps = args.target_steps
 
-        self.luchador_mode = 'theano'
+        self.luchador_mode = 'tensorflow'
         self.train_iterations = 0
 
         self._build_network()
@@ -76,7 +72,9 @@ class DeepQNetwork(object):
         outputs = self.ql.pre_trans_model.get_output_tensors()
         metrics = ['error', 'steps', 'reward']
         stats = ['min', 'average', 'max']
-        writer = SummaryWriter('./monitoring/test_tensorflow')
+
+        now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        writer = SummaryWriter('./shapshots/{}/{}'.format(self.luchador_mode, now))
         writer.add_graph(self.session.graph, 0)
         writer.register('pre_trans_network_params', 'histogram', params.keys())
         writer.register('pre_trans_network_outputs', 'histogram', outputs.keys())
@@ -177,19 +175,20 @@ class DeepQNetwork(object):
 
     def _summarize_training(self, step):
         metrics = ['error', 'steps', 'reward']
+        values = [self.summary_values[metric] for metric in metrics]
+        self.writer.summarize('training', step, values)
+
         for metric in metrics:
             summary_values = self.summary_values[metric]
             if not summary_values:
                 continue
-            print 'Summarizing {} {}'.format(metric, step)
             values = [
                 np.min(summary_values),
                 np.mean(summary_values),
                 np.max(summary_values),
             ]
             self.writer.summarize('training_{}'.format(metric), step, values)
-        values = [self.summary_values[metric] for metric in metrics]
-        self.writer.summarize('training', step, values)
+            self.summary_values[metric] = []
 
     '''
     def _summarize(self, step, name, value):
