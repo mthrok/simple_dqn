@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class DeepQNetwork(object):
     def __init__(self, num_actions, args):
+        self.now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         self.num_actions = num_actions
         self.batch_size = args.batch_size
         self.discount_rate = args.discount_rate
@@ -75,7 +76,7 @@ class DeepQNetwork(object):
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         opt = tf.train.RMSPropOptimizer(
             learning_rate=self.learning_rate,
-            decay=self.decay_rate)
+            momentum=self.decay_rate, epsilon=0.01)
         wrt = self.ql.pre_trans_model.get_variables().values()
         self.optimization_op = opt.minimize(
             self.l2.error, global_step=self.global_step, var_list=wrt)
@@ -112,8 +113,7 @@ class DeepQNetwork(object):
         self.net_summary_ops = ops1 + ops2
 
     def _init_summary_writer(self):
-        now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        path = 'snapshots/{}'.format(now)
+        path = 'snapshots/{}'.format(self.now)
         self.writer = tf.train.SummaryWriter(path, self.session.graph)
 
     def _init_saver(self):
@@ -219,4 +219,7 @@ class DeepQNetwork(object):
         self.saver.restore(self.session, load_path)
 
     def save_weights(self, save_path):
-        self.saver.save(self.session, save_path)
+        parts = save_path.split('/')
+        parts.insert(-1, self.now)
+        path = '/'.join(parts)
+        self.saver.save(self.session, path)
