@@ -3,8 +3,6 @@ import datetime
 
 import numpy as np
 
-import luchador
-
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -28,24 +26,27 @@ class DeepQNetwork(object):
         self.decay_rate = args.decay_rate
         self.target_steps = args.target_steps
 
-        self.luchador_mode = 'tensorflow'
+        self.luchador_mode = 'theano'  # 'tensorflow'  #
+        self.data_format = ('NHWC' if self.luchador_mode == 'tensorflow' and
+                            self.backend == 'cpu' else 'NCHW')
         self.train_iterations = 0
 
         self._build_network()
 
     def _build_network(self):
-        luchador.set_nn_backend(self.luchador_mode)
-        from luchador.nn import DeepQLearning, Input, SSE2, RMSProp, Session, SummaryWriter
-        from luchador.nn.models import model_factory
-
-        if self.luchador_mode == 'tensorflow' and self.backend == 'cpu':
-            input_shape = (self.batch_size, ) + self.screen_dim + (self.history_length, )
-            data_format = 'NHWC'
+        if self.data_format == 'NHWC':
+            input_shape = (self.batch_size,) + self.screen_dim + (self.history_length,)
         else:
             input_shape = (self.batch_size, self.history_length) + self.screen_dim
-            data_format = 'NCHW'
 
-        luchador.nn.set_cnn_format(data_format)
+        import luchador
+        luchador.set_nn_backend(self.luchador_mode)
+
+        import luchador.nn
+        luchador.nn.set_cnn_format(self.data_format)
+
+        from luchador.nn.models import model_factory
+        from luchador.nn import DeepQLearning, Input, SSE2, RMSProp, Session, SummaryWriter
 
         def model_maker():
             dqn = (
@@ -59,7 +60,7 @@ class DeepQNetwork(object):
             self.discount_rate, self.min_reward, self.max_reward)
         self.ql.build(model_maker)
 
-        sse2 = SSE2(min_delta=1.01, max_delta=1.02)
+        sse2 = SSE2(min_delta=-self.clip_error, max_delta=self.clip_error)
         self.sse_error = sse2(self.ql.target_q, self.ql.pre_trans_model.output)
 
         rmsprop = RMSProp(self.learning_rate)
@@ -208,7 +209,7 @@ class DeepQNetwork(object):
         rewards = rewards.astype(np.float32)
         error = self.session.run(
             name='optimization',
-            outputs=[self.sse_error],
+            outputs=self.sse_error,
             inputs={
                 self.ql.pre_states: prestates,
                 self.ql.actions: actions,
@@ -216,18 +217,14 @@ class DeepQNetwork(object):
                 self.ql.post_states: poststates,
                 self.ql.terminals: terminals,
             },
-            updates=self.update_op)[0]
+            updates=self.update_op)
         return error
 
     def predict(self, states):
         # minibatch is full size, because Agent pass in such way
-
-        if self.luchador_mode == 'tensorflow' and self.backend == 'cpu':
-            # If using CPU, this must be transposed to 'NHWC'
+        assert states.shape == (self.batch_size, self.history_length,) + self.screen_dim
+        if self.data_format == 'NHWC':
             states = states.transpose((0, 2, 3, 1))
-            assert states.shape == (self.batch_size,) + self.screen_dim + (self.history_length,)
-        else:
-            assert states.shape == (self.batch_size, self.history_length,) + self.screen_dim
 
         # calculate Q-values for the states
         qvalues = self._get_pre_q(states)
