@@ -74,7 +74,7 @@ class DeepQNetwork(object):
         stats = ['min', 'average', 'max']
 
         now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        writer = SummaryWriter('./shapshots/{}/{}'.format(self.luchador_mode, now))
+        writer = SummaryWriter('./snapshots/{}/{}'.format(self.luchador_mode, now))
         writer.add_graph(self.session.graph, 0)
         writer.register('pre_trans_network_params', 'histogram', params.keys())
         writer.register('pre_trans_network_outputs', 'histogram', outputs.keys())
@@ -92,7 +92,6 @@ class DeepQNetwork(object):
             'reward': [],
             'steps': [],
         }
-
 
     '''
     def _get_device_name(self):
