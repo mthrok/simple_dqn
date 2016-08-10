@@ -3,6 +3,17 @@ import datetime
 
 import numpy as np
 
+import luchador
+from luchador.nn.models import model_factory
+from luchador.nn import (
+    DeepQLearning,
+    Input,
+    SSE2,
+    NeonRMSProp as Optimizer,
+    Session,
+    SummaryWriter,
+    scope
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -26,10 +37,8 @@ class DeepQNetwork(object):
         self.decay_rate = args.decay_rate
         self.target_steps = args.target_steps
 
-        self.luchador_mode = 'theano'  # 'tensorflow'  #
-        self.data_format = ('NHWC' if self.luchador_mode == 'tensorflow' and
-                            self.backend == 'cpu' else 'NCHW')
         self.train_iterations = 0
+        self.data_format = luchador.get_nn_conv_format()
 
         self._build_network()
 
@@ -38,15 +47,6 @@ class DeepQNetwork(object):
             input_shape = (self.batch_size,) + self.screen_dim + (self.history_length,)
         else:
             input_shape = (self.batch_size, self.history_length) + self.screen_dim
-
-        import luchador
-        luchador.set_nn_backend(self.luchador_mode)
-
-        import luchador.nn
-        luchador.nn.set_cnn_format(self.data_format)
-
-        from luchador.nn.models import model_factory
-        from luchador.nn import DeepQLearning, Input, SSE2, RMSProp, Session, SummaryWriter
 
         def model_maker():
             dqn = (
@@ -61,22 +61,23 @@ class DeepQNetwork(object):
         self.ql.build(model_maker)
 
         sse2 = SSE2(min_delta=-self.clip_error, max_delta=self.clip_error)
-        self.sse_error = sse2(self.ql.target_q, self.ql.pre_trans_model.output)
+        self.sse_error = sse2(self.ql.target_q, self.ql.pre_trans_net.output)
 
-        rmsprop = RMSProp(self.learning_rate)
-        params = self.ql.pre_trans_model.get_parameter_variables()
-        self.update_op = rmsprop.minimize(self.sse_error, wrt=params.values())
+        with scope.variable_scope('optimization'):
+            rmsprop = Optimizer(self.learning_rate, decay=self.decay_rate)
+            params = self.ql.pre_trans_net.get_parameter_variables()
+            self.update_op = rmsprop.minimize(self.sse_error, wrt=params.values())
 
         self.session = Session()
         self.session.initialize()
 
-        outputs = self.ql.pre_trans_model.get_output_tensors()
-        metrics = ['error', 'steps', 'reward']
-        stats = ['min', 'average', 'max']
-
         now = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        writer = SummaryWriter('./snapshots/{}/{}'.format(self.luchador_mode, now))
+        writer = SummaryWriter('./snapshots/{}/{}'.format(luchador.get_nn_backend(), now))
         writer.add_graph(self.session.graph, 0)
+
+        stats = ['min', 'average', 'max']
+        metrics = ['error', 'steps', 'reward']
+        outputs = self.ql.pre_trans_net.get_output_tensors()
         writer.register('pre_trans_network_params', 'histogram', params.keys())
         writer.register('pre_trans_network_outputs', 'histogram', outputs.keys())
         writer.register('training', 'histogram',
@@ -138,7 +139,7 @@ class DeepQNetwork(object):
 
         # minibatches are in order of 'NCHW'
         # If using CPU in tensorflow, this must be transposed to 'NHWC'
-        if self.luchador_mode == 'tensorflow' and self.backend == 'cpu':
+        if self.data_format == 'NHWC':
             prestates = prestates.transpose((0, 2, 3, 1))
             poststates = poststates.transpose((0, 2, 3, 1))
 
@@ -163,8 +164,8 @@ class DeepQNetwork(object):
         self.session.run(name='sync', updates=self.ql.sync_op)
 
     def _summarize_net(self, step, states):
-        params = self.ql.pre_trans_model.get_parameter_variables()
-        outputs = self.ql.pre_trans_model.get_output_tensors()
+        params = self.ql.pre_trans_net.get_parameter_variables()
+        outputs = self.ql.pre_trans_net.get_output_tensors()
         params_vals = self.session.run(
             name='params', outputs=params.values())
         output_vals = self.session.run(
@@ -200,7 +201,7 @@ class DeepQNetwork(object):
     def _get_pre_q(self, prestates):
         preq = self.session.run(
             name='predict',
-            outputs=[self.ql.pre_trans_model.output],
+            outputs=[self.ql.predicted_q],
             inputs={self.ql.pre_states: prestates}
         )[0]
         return preq
