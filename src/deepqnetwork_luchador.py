@@ -4,7 +4,6 @@ import datetime
 import numpy as np
 
 import luchador
-from luchador.nn.models import model_factory
 from luchador.nn import (
     DeepQLearning,
     Input,
@@ -12,8 +11,10 @@ from luchador.nn import (
     NeonRMSProp as Optimizer,
     Session,
     SummaryWriter,
-    scope
+    scope,
 )
+from luchador.nn.util import get_model
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -50,8 +51,8 @@ class DeepQNetwork(object):
 
         def model_maker():
             dqn = (
-                model_factory('image_normalizer', denom=255.0) +
-                model_factory('vanilla_dqn', n_actions=self.num_actions)
+                get_model('image_normalizer', denom=255.0) +
+                get_model('vanilla_dqn', n_actions=self.num_actions)
             )
             dqn(Input(shape=input_shape))
             return dqn
