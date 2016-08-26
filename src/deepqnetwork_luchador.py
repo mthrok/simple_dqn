@@ -8,12 +8,11 @@ from luchador.nn import (
     DeepQLearning,
     Input,
     SSE2,
-    NeonRMSProp as Optimizer,
     Session,
     SummaryWriter,
     scope,
 )
-from luchador.nn.util import get_model
+from luchador.nn.util import get_model, get_optimizer
 
 
 logger = logging.getLogger(__name__)
@@ -64,10 +63,11 @@ class DeepQNetwork(object):
         sse2 = SSE2(min_delta=-self.clip_error, max_delta=self.clip_error)
         self.sse_error = sse2(self.ql.target_q, self.ql.pre_trans_net.output)
 
-        rmsprop = Optimizer(self.learning_rate, decay=self.decay_rate)
+        Optimizer = get_optimizer('NeonRMSProp')
+        optimizer = Optimizer(self.learning_rate, decay=self.decay_rate)
         params = self.ql.pre_trans_net.get_parameter_variables()
         with scope.name_scope('optimization'):
-            self.update_op = rmsprop.minimize(self.sse_error, wrt=params.values())
+            self.update_op = optimizer.minimize(self.sse_error, wrt=params.values())
 
         self.session = Session()
         self.session.initialize()
